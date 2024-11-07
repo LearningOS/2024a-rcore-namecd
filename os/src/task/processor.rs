@@ -7,6 +7,7 @@
 use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
+use crate::config::MAX_SYSCALL_NUM;
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
@@ -43,6 +44,31 @@ impl Processor {
     ///Get current task in cloning semanteme
     pub fn current(&self) -> Option<Arc<TaskControlBlock>> {
         self.current.as_ref().map(Arc::clone)
+    }
+    /// increase the syscall times of current task
+    fn increase_syscall_times(&self, syscall_id: usize) {
+        // let mut inner = self.inner.exclusive_access();
+        // let cur = inner.current_task;
+        // inner.tasks[cur].syscall_times[syscall_id] += 1;
+        // drop(inner);
+        let current_task = self.current.as_ref().unwrap();
+        let mut inner = current_task.inner_exclusive_access();
+        inner.syscall_times[syscall_id] += 1;
+        drop(inner);
+    }
+
+    /// get the syscall times
+    fn get_syscall_times(&self) -> [u32; MAX_SYSCALL_NUM] {
+        let current_task = self.current.as_ref().unwrap();
+        let inner = current_task.inner_exclusive_access();
+        inner.syscall_times
+    }
+
+    /// get the begin time of current task
+    fn get_current_begin_time(&self) -> usize {
+        let current_task = self.current.as_ref().unwrap();
+        let inner = current_task.inner_exclusive_access();
+        inner.begin_time
     }
 }
 
@@ -108,4 +134,19 @@ pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
     unsafe {
         __switch(switched_task_cx_ptr, idle_task_cx_ptr);
     }
+}
+
+/// increase the syscall times of current task
+pub fn increase_syscall_times(syscall_id: usize) {
+    PROCESSOR.exclusive_access().increase_syscall_times(syscall_id);
+}
+
+/// get the syscall times
+pub fn get_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
+    PROCESSOR.exclusive_access().get_syscall_times()
+}
+
+/// get the begin time of current task
+pub fn get_current_begin_time() -> usize {
+    PROCESSOR.exclusive_access().get_current_begin_time()
 }
