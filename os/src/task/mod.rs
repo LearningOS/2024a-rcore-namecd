@@ -14,12 +14,15 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
+
+use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::{get_app_data, get_num_app};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
 use lazy_static::*;
 use switch::__switch;
+use crate::timer::get_time_ms;
 pub use task::{TaskControlBlock, TaskStatus};
 
 pub use context::TaskContext;
@@ -79,6 +82,7 @@ impl TaskManager {
         let mut inner = self.inner.exclusive_access();
         let next_task = &mut inner.tasks[0];
         next_task.task_status = TaskStatus::Running;
+        next_task.begin_time = get_time_ms();
         let next_task_cx_ptr = &next_task.task_cx as *const TaskContext;
         drop(inner);
         let mut _unused = TaskContext::zero_init();
@@ -140,7 +144,11 @@ impl TaskManager {
             let mut inner = self.inner.exclusive_access();
             let current = inner.current_task;
             inner.tasks[next].task_status = TaskStatus::Running;
+            if inner.tasks[next].begin_time == 0 {
+                inner.tasks[next].begin_time = get_time_ms();
+            }
             inner.current_task = next;
+            
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
             drop(inner);
@@ -153,6 +161,27 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+
+    /// increase the syscall times of current task
+    fn increase_syscall_times(&self, syscall_id: usize) {
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        inner.tasks[cur].syscall_times[syscall_id] += 1;
+        drop(inner);
+    }
+
+    /// get the syscall times
+    fn get_syscall_times(&self) -> [u32; MAX_SYSCALL_NUM] {
+        let inner = self.inner.exclusive_access();
+        inner.tasks[inner.current_task].syscall_times
+    }
+
+    /// get the begin time of current task
+    fn get_current_begin_time(&self) -> usize {
+        let inner = self.inner.exclusive_access();
+        inner.tasks[inner.current_task].begin_time
+    }
+
 }
 
 /// Run the first task in task list.
@@ -201,4 +230,19 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// increase the syscall times of current task
+pub fn increase_syscall_times(syscall_id: usize) {
+    TASK_MANAGER.increase_syscall_times(syscall_id);
+}
+
+/// get the syscall times
+pub fn get_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
+    TASK_MANAGER.get_syscall_times()
+}
+
+/// get the begin time of current task
+pub fn get_current_begin_time() -> usize {
+    TASK_MANAGER.get_current_begin_time()
 }
