@@ -5,7 +5,10 @@ use crate::{
     task::{
         current_process, current_task, current_user_token, exit_current_and_run_next, pid2process,
         suspend_current_and_run_next, SignalFlags, TaskStatus,
+        get_current_begin_time, get_syscall_times,
     },
+    timer::{get_time_ms,get_time_us,},
+    mm::translated_byte_buffer,
 };
 use alloc::{string::String, sync::Arc, vec::Vec};
 
@@ -163,11 +166,21 @@ pub fn sys_kill(pid: usize, signal: u32) -> isize {
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
-        current_task().unwrap().process.upgrade().unwrap().getpid()
-    );
-    -1
+    trace!("kernel: sys_get_time");
+    let token = current_user_token();
+    let mut buf = translated_byte_buffer(token, _ts as *const u8, core::mem::size_of::<TimeVal>());
+    if buf.len() == 0 {
+        return -1;
+    }
+    let sec = get_time_ms() / 1000;
+    let usec = get_time_us() % 1000000;
+    unsafe {
+        let ts = buf[0].as_mut_ptr() as *mut TimeVal;
+        (*ts).sec = sec;
+        (*ts).usec = usec;
+    }
+    
+    0
 }
 
 /// task_info syscall
@@ -176,11 +189,21 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TaskInfo`] is splitted by two pages ?
 pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_task_info NOT IMPLEMENTED",
-        current_task().unwrap().process.upgrade().unwrap().getpid()
-    );
-    -1
+    trace!("kernel: sys_task_info NOT IMPLEMENTED YET!");
+    let token = current_user_token();
+    let mut buf = translated_byte_buffer(token, _ti as *const u8, core::mem::size_of::<TaskInfo>());
+    if buf.len() == 0 {
+        return -1;
+    }
+    let syscall_time = get_syscall_times();
+    let running_time = get_time_ms() - get_current_begin_time();
+    unsafe {
+        let ti = buf[0].as_mut_ptr() as *mut TaskInfo;
+        (*ti).status = TaskStatus::Running;
+        (*ti).syscall_times = syscall_time;
+        (*ti).time = running_time;
+    }
+    0
 }
 
 /// mmap syscall

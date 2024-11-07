@@ -35,6 +35,7 @@ pub use manager::{add_task, pid2process, remove_from_pid2process, remove_task, w
 pub use processor::{
     current_kstack_top, current_process, current_task, current_trap_cx, current_trap_cx_user_va,
     current_user_token, run_tasks, schedule, take_current_task,
+    Processor, get_current_begin_time, get_syscall_times, increase_syscall_times,
 };
 pub use signal::SignalFlags;
 pub use task::{TaskControlBlock, TaskStatus};
@@ -204,3 +205,5 @@ pub fn remove_inactive_task(task: Arc<TaskControlBlock>) {
     trace!("kernel: remove_inactive_task .. remove_timer");
     remove_timer(Arc::clone(&task));
 }
+
+
