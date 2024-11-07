@@ -8,6 +8,7 @@ use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
 use crate::config::MAX_SYSCALL_NUM;
+use crate::mm::{MapPermission, VirtAddr};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
@@ -70,6 +71,55 @@ impl Processor {
         let inner = current_task.inner_exclusive_access();
         inner.begin_time
     }
+    
+    /// alloc a framed area
+    fn alloc_framed_area(&self, start: usize, end: usize, permission: MapPermission) -> bool{
+        // let mut inner = self.inner.exclusive_access();
+        // let cur = inner.current_task;
+        // let start_va : VirtAddr = start.into();
+        // let mut end_va : VirtAddr = end.into();
+        // end_va = end_va.ceil().into();
+        // if !start_va.aligned() || inner.tasks[cur].memory_set.check_overlap(start_va, end_va) {
+        //     return false;
+        // }
+        
+        // inner.tasks[cur].memory_set.insert_framed_area(start_va, end_va, permission);
+        // return true;
+        let current_task = self.current.as_ref().unwrap();
+        let mut inner = current_task.inner_exclusive_access();
+        let start_va : VirtAddr = start.into();
+        let mut end_va : VirtAddr = end.into();
+        end_va = end_va.ceil().into();
+        if !start_va.aligned() || inner.memory_set.check_overlap(start_va, end_va) {
+            return false;
+        }
+        inner.memory_set.insert_framed_area(start_va, end_va, permission);
+        return true;
+    }
+    /// dealloc a framed area
+    fn dealloc_framed_area(&self, start: usize, end: usize) -> bool{
+        // let mut inner = self.inner.exclusive_access();
+        // let cur = inner.current_task;
+        // let start_va : VirtAddr = start.into();
+        // let mut end_va : VirtAddr = end.into();
+        // end_va = end_va.ceil().into();
+        // if !start_va.aligned() || inner.tasks[cur].memory_set.check_gap(start_va, end_va) 
+        //    || !inner.tasks[cur].memory_set.remove_framed_area(start_va, end_va)  {
+        //     return false;
+        // }
+        // true
+        let current_task = self.current.as_ref().unwrap();
+        let mut inner = current_task.inner_exclusive_access();
+        let start_va : VirtAddr = start.into();
+        let mut end_va : VirtAddr = end.into();
+        end_va = end_va.ceil().into();
+        if !start_va.aligned() || inner.memory_set.check_gap(start_va, end_va) 
+            || !inner.memory_set.remove_framed_area(start_va, end_va)  {
+            return false;
+        }
+        true
+    }
+    
 }
 
 lazy_static! {
@@ -149,4 +199,14 @@ pub fn get_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
 /// get the begin time of current task
 pub fn get_current_begin_time() -> usize {
     PROCESSOR.exclusive_access().get_current_begin_time()
+}
+
+/// alloc a framed area
+pub fn alloc_framed_area(start: usize, end: usize, permission: MapPermission) -> bool{
+    PROCESSOR.exclusive_access().alloc_framed_area(start, end, permission)
+}
+
+/// dealloc a framed area
+pub fn dealloc_framed_area(start: usize, end: usize) -> bool{
+    PROCESSOR.exclusive_access().dealloc_framed_area(start, end)
 }
