@@ -3,10 +3,10 @@ use crate::{
     config::MAX_SYSCALL_NUM,
     task::{
         change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus,
-        current_user_token, get_current_begin_time, get_syscall_times,
+        current_user_token, get_current_begin_time, get_syscall_times, alloc_framed_area,dealloc_framed_area
     },
     timer::{get_time_ms,get_time_us,},
-    mm::translated_byte_buffer,
+    mm::{translated_byte_buffer, MapPermission},
 };
 
 #[repr(C)]
@@ -86,13 +86,25 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
 // YOUR JOB: Implement mmap.
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
     trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
-    -1
+    if _port & 0x7 == 0 || _port & !0x7 != 0 {
+        return -1;
+    }
+    let permision = MapPermission::from_bits_truncate((_port as u8) << 1) | MapPermission::U; 
+    if alloc_framed_area(_start, _start + _len, permision) == true {
+        0
+    } else {
+        -1
+    }
 }
 
 // YOUR JOB: Implement munmap.
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
-    -1
+    if dealloc_framed_area(_start, _start + _len){
+        0
+    } else {
+        -1
+    }
 }
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {

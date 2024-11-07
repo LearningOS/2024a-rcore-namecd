@@ -15,8 +15,10 @@ mod switch;
 mod task;
 
 
+
 use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::{MapPermission, VirtAddr};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
@@ -182,6 +184,34 @@ impl TaskManager {
         inner.tasks[inner.current_task].begin_time
     }
 
+    /// alloc a framed area
+    fn alloc_framed_area(&self, start: usize, end: usize, permission: MapPermission) -> bool{
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        let start_va : VirtAddr = start.into();
+        let mut end_va : VirtAddr = end.into();
+        end_va = end_va.ceil().into();
+        if !start_va.aligned() || inner.tasks[cur].memory_set.check_overlap(start_va, end_va) {
+            return false;
+        }
+        
+        inner.tasks[cur].memory_set.insert_framed_area(start_va, end_va, permission);
+        return true;
+    }
+    /// dealloc a framed area
+    fn dealloc_framed_area(&self, start: usize, end: usize) -> bool{
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        let start_va : VirtAddr = start.into();
+        let mut end_va : VirtAddr = end.into();
+        end_va = end_va.ceil().into();
+        if !start_va.aligned() || inner.tasks[cur].memory_set.check_gap(start_va, end_va) 
+           || !inner.tasks[cur].memory_set.remove_framed_area(start_va, end_va)  {
+            return false;
+        }
+        true
+    }
+    
 }
 
 /// Run the first task in task list.
@@ -245,4 +275,14 @@ pub fn get_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
 /// get the begin time of current task
 pub fn get_current_begin_time() -> usize {
     TASK_MANAGER.get_current_begin_time()
+}
+
+/// alloc a framed area
+pub fn alloc_framed_area(start: usize, end: usize, permission: MapPermission) -> bool{
+    TASK_MANAGER.alloc_framed_area(start, end, permission)
+}
+
+/// dealloc a framed area
+pub fn dealloc_framed_area(start: usize, end: usize) -> bool{
+    TASK_MANAGER.dealloc_framed_area(start, end)
 }

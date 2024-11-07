@@ -70,6 +70,26 @@ impl MemorySet {
         }
         self.areas.push(map_area);
     }
+    /// Remove a framed area
+    pub fn remove_framed_area(&mut self, start_va: VirtAddr, end_va: VirtAddr) -> bool{
+        if let Some(i) =  {
+            let mut res: Option<usize> = None;
+            for (i, area) in self.areas.iter().enumerate(){
+                if area.vpn_range.get_start() == start_va.floor() && area.vpn_range.get_end() == end_va.ceil(){
+                    res = Some(i);
+                    break;
+                }
+            }
+            res
+        }{
+            self.areas[i].unmap(&mut self.page_table);
+            self.areas.remove(i);
+            true
+        }
+        else{
+            false
+        }
+    }
     /// Mention that trampoline is not collected by areas.
     fn map_trampoline(&mut self) {
         self.page_table.map(
@@ -229,6 +249,30 @@ impl MemorySet {
             asm!("sfence.vma");
         }
     }
+    /// Check if the area is overlapped with existing areas
+    pub fn check_overlap(&self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+        let new_range = VPNRange::new(start_va.floor(), end_va.ceil());
+        for vpn in new_range{
+            if let Some(pte) = self.translate(vpn){
+                if pte.is_valid(){
+                    return true;
+                }
+            }
+        }
+        false
+    }
+    /// check the gap in the area
+    pub fn check_gap(&self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+        let new_range = VPNRange::new(start_va.floor(), end_va.ceil());
+        for vpn in new_range{
+            if let Some(pte) = self.translate(vpn){
+                if !pte.is_valid(){
+                    return true;
+                }
+            }
+        }
+        false
+    }
     /// Translate a virtual page number to a page table entry
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.page_table.translate(vpn)
@@ -309,6 +353,7 @@ impl MapArea {
         }
         page_table.unmap(vpn);
     }
+    
     pub fn map(&mut self, page_table: &mut PageTable) {
         for vpn in self.vpn_range {
             self.map_one(page_table, vpn);
