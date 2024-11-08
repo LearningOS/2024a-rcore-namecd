@@ -23,7 +23,25 @@ impl TaskManager {
     }
     /// Take a process out of the ready queue
     pub fn fetch(&mut self) -> Option<Arc<TaskControlBlock>> {
-        self.ready_queue.pop_front()
+        /*
+            // 这是原来的代码
+            self.ready_queue.pop_front()
+        */
+        // 扫描，找到stride最小的进程进行调度
+        let mut min_stride = usize::MAX;
+        let mut min_index = 0;
+        for (i, task) in self.ready_queue.iter().enumerate(){
+            let stride = task.inner_exclusive_access().stride;
+            if stride < min_stride {
+                min_stride = stride;
+                min_index = i;
+            }
+        }
+        if min_stride != usize::MAX {
+            Some(self.ready_queue.remove(min_index).unwrap())
+        } else {
+            None
+        }
     }
 }
 
