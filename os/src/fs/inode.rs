@@ -4,14 +4,14 @@
 //!
 //! `UPSafeCell<OSInodeInner>` -> `OSInode`: for static `ROOT_INODE`,we
 //! need to wrap `OSInodeInner` into `UPSafeCell`
-use super::File;
+use super::{File, Stat, StatMode,};
 use crate::drivers::BLOCK_DEVICE;
 use crate::mm::UserBuffer;
 use crate::sync::UPSafeCell;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bitflags::*;
-use easy_fs::{EasyFileSystem, Inode};
+use easy_fs::{EasyFileSystem, Inode,};
 use lazy_static::*;
 
 /// inode in memory
@@ -52,6 +52,21 @@ impl OSInode {
         }
         v
     }
+    /// get the status of the OSInode
+    pub fn get_status(&self) -> Stat {
+        let inner = self.inner.exclusive_access();
+        Stat { 
+            dev: 0, 
+            ino: inner.inode.inode_id() as u64,
+            mode: match inner.inode.file_type() {
+                0o040000 => StatMode::DIR,
+                0o100000 => StatMode::FILE,
+                _ => StatMode::NULL,
+            },
+            nlink: inner.inode.get_nlink(), 
+            pad: [0;7],
+        }
+    }
 }
 
 lazy_static! {
@@ -60,7 +75,19 @@ lazy_static! {
         Arc::new(EasyFileSystem::root_inode(&efs))
     };
 }
-
+/// Create a hard link newname -> oldname
+pub fn linkat(oldname:&str, newname: &str) -> isize{
+    let res = ROOT_INODE.link(oldname, newname);
+    if res < 0 {
+        return -1;
+    }
+    ROOT_INODE.find(oldname).unwrap().increase_nlink();
+    0
+}
+/// unlink a file
+pub fn unlink(name: &str) -> isize {
+    ROOT_INODE.unlink(name)
+}
 /// List all apps in the root directory
 pub fn list_apps() {
     println!("/**** APPS ****");
@@ -154,5 +181,9 @@ impl File for OSInode {
             total_write_size += write_size;
         }
         total_write_size
+    }
+    fn stat(&self, st : &mut Stat) -> isize {
+        *st = self.get_status();
+        0
     }
 }

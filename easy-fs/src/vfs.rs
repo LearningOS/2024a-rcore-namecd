@@ -183,4 +183,96 @@ impl Inode {
         });
         block_cache_sync_all();
     }
+    /// calculate inode id by block id and block offset
+    pub fn inode_id(&self) -> u32 {
+        let fs = self.fs.lock();
+        fs.get_inode_id_by_disk_pos(self.block_id, self.block_offset)
+    }
+    /// get the file type
+    pub fn file_type(&self) -> u32 {
+        self.read_disk_inode(|disk_inode|{
+            if disk_inode.is_dir() {
+                0o040000
+            }
+            else{
+                0o100000
+            }
+        })
+    }
+    /// get the number of hard links
+    pub fn get_nlink(&self) -> u32 {
+        self.read_disk_inode(|disk_inode|{
+            disk_inode.nlink
+        })
+    }
+    /// link a inode to another inode
+    /// only called by root
+    pub fn link(&self, oldname: &str, newname:&str) -> isize {
+        let mut fs = self.fs.lock();
+        let op = |root_disk_inode: &DiskInode| {
+            self.find_inode_id(oldname, root_disk_inode)
+        };
+        let inode_id = self.read_disk_inode(op);
+        if inode_id.is_none() {
+            return -1;
+        }
+        self.modify_disk_inode(|root_disk_inode|{
+            let file_count = (root_disk_inode.size as usize) / DIRENT_SZ;
+            let new_size = (file_count + 1 ) * DIRENT_SZ;
+            self.increase_size(new_size as u32, root_disk_inode, &mut fs);
+            let dirent = DirEntry::new(newname, inode_id.unwrap());
+            root_disk_inode.write_at(file_count * DIRENT_SZ, dirent.as_bytes(), &self.block_device);
+        });
+        block_cache_sync_all();
+        0
+    }
+    /// increase the number of hard links
+    pub fn increase_nlink(&self) {
+        self.modify_disk_inode(|disk_inode|{
+            disk_inode.nlink += 1;
+        });
+    }
+    /// unlink a inode
+    pub fn unlink(&self, name: &str) -> isize{
+        let mut fs = self.fs.lock();
+        let mut v: Vec<DirEntry> = Vec::new();
+        let mut inode_id: Option<u32> = None;
+        self.modify_disk_inode(|root_disk_inode| {
+            let file_count = root_disk_inode.size as usize / DIRENT_SZ;
+            for i in 0..file_count{
+                let mut dirent = DirEntry::empty();
+                root_disk_inode.read_at(i * DIRENT_SZ, dirent.as_bytes_mut(), &self.block_device);
+                if dirent.name() != name {
+                    v.push(dirent);
+                }
+                else{
+                    inode_id = Some(dirent.inode_id());
+                }
+            }
+        });
+        self.modify_disk_inode(|root_disk_inode|{
+            let data_clear = root_disk_inode.clear_size(&self.block_device);
+            for data_block in data_clear.into_iter(){
+                fs.dealloc_data(data_block);
+            }
+            self.increase_size((v.len() * DIRENT_SZ) as u32, root_disk_inode, &mut fs);
+            for (i, dirent) in v.into_iter().enumerate(){
+                root_disk_inode.write_at(i * DIRENT_SZ, dirent.as_bytes(), &self.block_device);
+            }
+        });
+        let (block_id, block_offset) = fs.get_disk_inode_pos(inode_id.unwrap());
+        get_block_cache(block_id as usize, Arc::clone(&self.block_device))
+            .lock()
+            .modify(block_offset, |disk_inode: &mut DiskInode|{
+                disk_inode.nlink -= 1;
+                if disk_inode.nlink == 0{
+                    let data_clear = disk_inode.clear_size(&self.block_device);
+                    for data_block in data_clear.into_iter(){
+                        fs.dealloc_data(data_block);
+                    }
+                }
+         });
+         block_cache_sync_all();
+         0
+    }
 }
