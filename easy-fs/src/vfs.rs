@@ -250,6 +250,7 @@ impl Inode {
                 }
             }
         });
+        // 清空root_inode的数据，实际上只是删除了目录项。然后再写回去除inode_id之外的就好
         self.modify_disk_inode(|root_disk_inode|{
             let data_clear = root_disk_inode.clear_size(&self.block_device);
             for data_block in data_clear.into_iter(){
