@@ -170,3 +170,9 @@ pub fn get_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
 pub fn get_current_begin_time() -> usize {
     PROCESSOR.exclusive_access().get_current_begin_time()
 }
+
+/// get the tid of current task
+#[allow(unused)]
+pub fn get_current_tid() -> usize {
+    current_task().unwrap().inner_exclusive_access().res.as_ref().unwrap().tid
+}

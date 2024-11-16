@@ -2,7 +2,7 @@
 
 use super::id::RecycleAllocator;
 use super::manager::insert_into_pid2process;
-use super::TaskControlBlock;
+use super::{get_current_tid, TaskControlBlock};
 use super::{add_task, SignalFlags};
 use super::{pid_alloc, PidHandle};
 use crate::fs::{File, Stdin, Stdout};
@@ -49,6 +49,8 @@ pub struct ProcessControlBlockInner {
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     /// condvar list
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
+    /// dead lock detector
+    pub deadlock_detector: Option<DeadlockDetector>,
 }
 
 impl ProcessControlBlockInner {
@@ -119,6 +121,7 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    deadlock_detector: Some(DeadlockDetector::new()),
                 })
             },
         });
@@ -245,6 +248,7 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    deadlock_detector: Some(DeadlockDetector::new()),
                 })
             },
         });
@@ -281,5 +285,95 @@ impl ProcessControlBlock {
     /// get pid
     pub fn getpid(&self) -> usize {
         self.pid.0
+    }
+}
+
+/// Deadlock Detector
+pub struct DeadlockDetector {
+    pub available: Vec<usize>,
+    pub allocated: Vec<Vec<usize>>,
+    pub need: Vec<Vec<usize>>,
+    pub finished: Vec<bool>,
+}
+
+impl DeadlockDetector {
+    #[allow(unused)]
+    pub fn new() -> Self {
+        Self {
+            available: Vec::new(),
+            allocated: Vec::new(),
+            need: Vec::new(),
+            finished: Vec::new(),
+        }
+    } 
+    #[allow(unused)]
+    pub fn init(&mut self, task_num: usize) {
+        self.available.push(0);
+        self.allocated.push(vec![0; task_num]);
+        self.need.push(vec![0; task_num]);
+        for i in 0..task_num {
+            self.finished.push(false);
+        }
+    }
+    #[allow(unused)]
+    pub fn add_available(&mut self, id: usize, res_num: usize) {
+        if id == self.available.len() {
+            self.available.push(res_num);
+        } else {
+            self.available[id] = res_num;
+        }
+    }
+    #[allow(unused)]
+    pub fn alloc_res(&mut self, id: usize) {
+        let tid: usize = get_current_tid();
+        self.available[id] -= 1;
+        self.allocated[tid][id] += 1;
+        self.need[tid][id] = 0;
+    }
+    #[allow(unused)]
+    pub fn dealloc_res(&mut self, id: usize) {
+        let tid: usize = get_current_tid();
+        self.available[id] += 1;
+        self.allocated[tid][id] -= 1;
+        self.need[tid][id] = 0;
+    }
+    #[allow(unused)]
+    pub fn detect_dead_lock(&self) -> bool {
+        let mut work = self.available.clone();
+        let mut finish = self.finished.clone();
+        let mut flag = true;
+        let task_num = self.allocated.len();
+        let res_num = self.available.len();
+        loop {
+            let mut find = false;
+            for i in 0..task_num {
+                if !finish[i] {
+                    let mut j = 0;
+                    while j < res_num {
+                        if self.need[i][j] > work[j] {
+                            break;
+                        }
+                        j += 1;
+                    }
+                    if j == res_num {
+                        for j in 0..res_num {
+                            work[j] += self.allocated[i][j];
+                        }
+                        finish[i] = true;
+                        find = true;
+                    }
+                }
+            }
+            if !find {
+                break;
+            }
+        }
+        for i in 0..task_num {
+            if !finish[i] {
+                flag = false;
+                break;
+            }
+        }
+        flag
     }
 }
