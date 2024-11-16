@@ -49,12 +49,14 @@ pub fn sys_mutex_create(blocking: bool) -> isize {
         .map(|(id, _)| id)
     {
         process_inner.mutex_list[id] = mutex;
-        process_inner.deadlock_detector.as_mut().unwrap().add_available(id, 1);
+        let task_num = process_inner.tasks.len();
+        process_inner.deadlock_detector.as_mut().unwrap().add_available(id,task_num, 1);
         id as isize
     } else {
         process_inner.mutex_list.push(mutex);
         let id = process_inner.mutex_list.len() as isize - 1;
-        process_inner.deadlock_detector.as_mut().unwrap().add_available(id as usize, 1);
+        let task_num = process_inner.tasks.len();
+        process_inner.deadlock_detector.as_mut().unwrap().add_available(id as usize,task_num, 1);
         id
     }
 }
@@ -146,14 +148,16 @@ pub fn sys_semaphore_create(res_count: usize) -> isize {
         .map(|(id, _)| id)
     {
         process_inner.semaphore_list[id] = Some(Arc::new(Semaphore::new(res_count)));
-        process_inner.deadlock_detector.as_mut().unwrap().add_available(id, res_count);
+        let task_num = process_inner.tasks.len();
+        process_inner.deadlock_detector.as_mut().unwrap().add_available(id, task_num, res_count);
         id
     } else {
         process_inner
             .semaphore_list
             .push(Some(Arc::new(Semaphore::new(res_count))));
         let id = process_inner.semaphore_list.len() - 1;
-        process_inner.deadlock_detector.as_mut().unwrap().add_available(id, res_count);
+        let task_num = process_inner.tasks.len();
+        process_inner.deadlock_detector.as_mut().unwrap().add_available(id, task_num,res_count);
         id
     };
     id as isize
@@ -305,13 +309,14 @@ pub fn sys_condvar_wait(condvar_id: usize, mutex_id: usize) -> isize {
 pub fn sys_enable_deadlock_detect(_enabled: usize) -> isize {
     trace!("kernel: sys_enable_deadlock_detect NOT IMPLEMENTED");
     if _enabled == 1 {
+        let process = current_process();
+        let mut process_inner = process.inner_exclusive_access();
+        process_inner.deadlock_detector.as_mut().unwrap().init();
         0
     } else {
         let process = current_process();
         let mut process_inner = process.inner_exclusive_access();
-        let task_num = process_inner.tasks.len();
         process_inner.deadlock_detector = None;
-        process_inner.deadlock_detector.as_mut().unwrap().init(task_num);
         0
     }
 }

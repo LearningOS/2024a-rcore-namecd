@@ -5,6 +5,7 @@ use super::manager::insert_into_pid2process;
 use super::{get_current_tid, TaskControlBlock};
 use super::{add_task, SignalFlags};
 use super::{pid_alloc, PidHandle};
+use crate::config::{MAX_RES_NUM, MAX_TASK_NUM};
 use crate::fs::{File, Stdin, Stdout};
 use crate::mm::{translated_refmut, MemorySet, KERNEL_SPACE};
 use crate::sync::{Condvar, Mutex, Semaphore, UPSafeCell};
@@ -307,21 +308,23 @@ impl DeadlockDetector {
         }
     } 
     #[allow(unused)]
-    pub fn init(&mut self, task_num: usize) {
-        self.available.push(0);
-        self.allocated.push(vec![0; task_num]);
-        self.need.push(vec![0; task_num]);
-        for i in 0..task_num {
-            self.finished.push(false);
-        }
+    pub fn init(&mut self) {
+        // self.available.push(0);
+        // self.allocated.push(vec![0; 0]);
+        // self.need.push(vec![0; 0]);
+        // self.finished.push(true);
+        self.available.resize(MAX_RES_NUM, 0);
+        self.allocated.resize(MAX_TASK_NUM, vec![0; MAX_RES_NUM].to_vec());
+        self.need.resize(MAX_TASK_NUM, vec![0; MAX_RES_NUM].to_vec());
+        self.finished.resize(MAX_TASK_NUM, false);
     }
     #[allow(unused)]
-    pub fn add_available(&mut self, id: usize, res_num: usize) {
+    pub fn add_available(&mut self, id: usize,task_num: usize, res_num: usize) {
         if id == self.available.len() {
             self.available.push(res_num);
         } else {
             self.available[id] = res_num;
-        }
+        } 
     }
     #[allow(unused)]
     pub fn alloc_res(&mut self, id: usize) {
@@ -335,6 +338,7 @@ impl DeadlockDetector {
         let tid: usize = get_current_tid();
         self.available[id] += 1;
         self.allocated[tid][id] -= 1;
+        self.finished[tid] = true;
         self.need[tid][id] = 0;
     }
     #[allow(unused)]
