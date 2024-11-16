@@ -122,7 +122,7 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
-                    deadlock_detector: Some(DeadlockDetector::new()),
+                    deadlock_detector: None,
                 })
             },
         });
@@ -249,7 +249,7 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
-                    deadlock_detector: Some(DeadlockDetector::new()),
+                    deadlock_detector: None,
                 })
             },
         });
@@ -291,14 +291,18 @@ impl ProcessControlBlock {
 
 /// Deadlock Detector
 pub struct DeadlockDetector {
+    /// available resources
     pub available: Vec<usize>,
+    /// allocated resources
     pub allocated: Vec<Vec<usize>>,
+    /// needed resources
     pub need: Vec<Vec<usize>>,
+    /// finished or not
     pub finished: Vec<bool>,
 }
 
 impl DeadlockDetector {
-    #[allow(unused)]
+    /// create a new deadlock detector
     pub fn new() -> Self {
         Self {
             available: Vec::new(),
@@ -307,7 +311,7 @@ impl DeadlockDetector {
             finished: Vec::new(),
         }
     } 
-    #[allow(unused)]
+    /// initialize the deadlock detector
     pub fn init(&mut self) {
         // self.available.push(0);
         // self.allocated.push(vec![0; 0]);
@@ -318,22 +322,22 @@ impl DeadlockDetector {
         self.need.resize(MAX_TASK_NUM, vec![0; MAX_RES_NUM].to_vec());
         self.finished.resize(MAX_TASK_NUM, false);
     }
-    #[allow(unused)]
-    pub fn add_available(&mut self, id: usize,task_num: usize, res_num: usize) {
+    /// add available resources
+    pub fn add_available(&mut self, id: usize, res_num: usize) {
         if id == self.available.len() {
             self.available.push(res_num);
         } else {
             self.available[id] = res_num;
         } 
     }
-    #[allow(unused)]
+    /// add allocated resources
     pub fn alloc_res(&mut self, id: usize) {
         let tid: usize = get_current_tid();
         self.available[id] -= 1;
         self.allocated[tid][id] += 1;
         self.need[tid][id] = 0;
     }
-    #[allow(unused)]
+    /// add needed resources
     pub fn dealloc_res(&mut self, id: usize) {
         let tid: usize = get_current_tid();
         self.available[id] += 1;
@@ -341,7 +345,7 @@ impl DeadlockDetector {
         self.finished[tid] = true;
         self.need[tid][id] = 0;
     }
-    #[allow(unused)]
+    /// add needed resources
     pub fn detect_dead_lock(&self) -> bool {
         let mut work = self.available.clone();
         let mut finish = self.finished.clone();

@@ -30,13 +30,14 @@ use process::ProcessControlBlock;
 use switch::__switch;
 
 pub use context::TaskContext;
+pub use process::DeadlockDetector;
 pub use id::{kstack_alloc, pid_alloc, KernelStack, PidHandle, IDLE_PID};
 pub use manager::{add_task, pid2process, remove_from_pid2process, remove_task, wakeup_task};
 pub use processor::{
     current_kstack_top, current_process, current_task, current_trap_cx, current_trap_cx_user_va,
     current_user_token, run_tasks, schedule, take_current_task,
     Processor, get_current_begin_time, get_syscall_times, increase_syscall_times,
-    get_current_tid, 
+    get_current_tid,
 };
 pub use signal::SignalFlags;
 pub use task::{TaskControlBlock, TaskStatus};

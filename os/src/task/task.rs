@@ -46,6 +46,8 @@ pub struct TaskControlBlockInner {
     pub syscall_times: [u32; MAX_SYSCALL_NUM],
     /// begin time
     pub begin_time: usize,
+    /// enable stauts
+    pub enable_status: bool,
 }
 
 impl TaskControlBlockInner {
@@ -82,6 +84,7 @@ impl TaskControlBlock {
                     exit_code: None,
                     syscall_times: [0; MAX_SYSCALL_NUM],
                     begin_time: 0,
+                    enable_status: false,
                 })
             },
         }
